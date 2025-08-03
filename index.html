@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>水とグラフの連動シミュレーション</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f0f8ff;
+      text-align: center;
+      padding: 20px;
+    }
+
+    h2 {
+      margin-bottom: 10px;
+    }
+
+    #statusDisplay {
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
+
+    .buttons {
+      margin-bottom: 10px;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      margin: 0 5px;
+      cursor: pointer;
+    }
+
+    .container {
+      display: flex;
+      justify-content: center;
+      gap: 80px;
+      margin-top: 20px;
+    }
+
+    .beakerArea {
+      position: relative;
+      width: 240px;
+      height: 220px;
+      border: 2px solid #333;
+      border-radius: 10px;
+      background-color: white;
+      overflow: hidden;
+    }
+
+    .water {
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      height: 0;
+      background: linear-gradient(to top, #00bfff, #87cefa);
+    }
+
+    .graphWrapper {
+      position: relative;
+      width: 264px;
+      height: 240px;
+    }
+
+    .graphArea {
+      position: absolute;
+      left: 40px;
+      bottom: 20px;
+      width: 264px;
+      height: 220px;
+      border-left: 2px solid #333;
+      border-bottom: 2px solid #333;
+      background-color: #fff;
+    }
+
+    .gridLines {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      top: 0;
+      left: 0;
+    }
+
+    .gridLines .hLine {
+      position: absolute;
+      left: 0;
+      width: 100%;
+      height: 1px;
+      background-color: #ccc;
+    }
+
+    .gridLines .vLine {
+      position: absolute;
+      bottom: 0;
+      width: 1px;
+      height: 100%;
+      background-color: #ccc;
+    }
+
+    .yLabels {
+      position: absolute;
+      left: -30px;
+      bottom: 15px;
+      height: 220px;
+      width: 40px;
+      pointer-events: none;
+    }
+
+    .yLabels span {
+      position: absolute;
+      width: 100%;
+      text-align: right;
+      font-size: 12px;
+      color: #333;
+    }
+
+    .xLabels {
+      position: absolute;
+      left: 40px;
+      bottom: 0px;
+      width: 264px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+    }
+
+    .dot {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      background-color: red;
+      border-radius: 50%;
+      transform: translate(-50%, 50%);
+    }
+  </style>
+</head>
+<body>
+  <h2>ビーカーと水</h2>
+
+  <div id="statusDisplay">
+    時間: <span id="timeDisplay">0</span> 秒　
+    水量: <span id="volumeDisplay">0</span> ml　
+    モード: <span id="modeDisplay">増加</span>
+  </div>
+
+  <div class="buttons">
+    <button id="startBtn">増加開始</button>
+    <button id="resetBtn">リセット</button>
+    <button id="toggleDotBtn">動点を表示</button>
+    <button id="switchModeBtn">減少モードに切替</button>
+  </div>
+
+  <div class="container">
+    <div class="beakerArea">
+      <div class="water" id="water"></div>
+    </div>
+
+    <div class="graphWrapper">
+      <div class="yLabels"></div>
+
+      <div class="xLabels">
+        <span>0</span><span>1</span><span>2</span><span>3</span><span>4</span>
+        <span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span>
+      </div>
+
+      <div class="graphArea" id="graphArea">
+        <div class="gridLines" id="gridLines"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const water = document.getElementById("water");
+    const startBtn = document.getElementById("startBtn");
+    const resetBtn = document.getElementById("resetBtn");
+    const toggleDotBtn = document.getElementById("toggleDotBtn");
+    const switchModeBtn = document.getElementById("switchModeBtn");
+    const graphArea = document.getElementById("graphArea");
+    const gridLines = document.getElementById("gridLines");
+    const timeDisplay = document.getElementById("timeDisplay");
+    const volumeDisplay = document.getElementById("volumeDisplay");
+    const modeDisplay = document.getElementById("modeDisplay");
+    const yLabels = document.querySelector(".yLabels");
+
+    let time = 0;
+    let interval;
+    let showDots = false;
+    let mode = "increase"; // "increase" or "decrease"
+
+    for (let i = 0; i <= 10; i++) {
+      const label = document.createElement("span");
+      label.textContent = i * 20;
+      label.style.bottom = `${i * 20}px`;
+      yLabels.appendChild(label);
+    }
+
+    for (let i = 0; i <= 10; i++) {
+      const hLine = document.createElement("div");
+      hLine.className = "hLine";
+      hLine.style.bottom = `${i * 20}px`;
+      gridLines.appendChild(hLine);
+    }
+
+    for (let i = 0; i <= 10; i++) {
+      const vLine = document.createElement("div");
+      vLine.className = "vLine";
+      vLine.style.left = `${i * 24}px`;
+      gridLines.appendChild(vLine);
+    }
+
+    function animateWater(fromHeight, toHeight, duration = 1000, onComplete) {
+      const startTime = performance.now();
+
+      function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const currentHeight = fromHeight + (toHeight - fromHeight) * progress;
+        water.style.height = currentHeight + "px";
+
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else {
+          water.style.height = toHeight + "px";
+          if (onComplete) onComplete();
+        }
+      }
+
+      requestAnimationFrame(step);
+    }
+
+    function addDot(x, y) {
+      if (!showDots) return;
+      const dot = document.createElement("div");
+      dot.className = "dot";
+      dot.style.left = x + "px";
+      dot.style.bottom = y + "px";
+      graphArea.appendChild(dot);
+    }
+
+    startBtn.addEventListener("click", () => {
+      clearInterval(interval);
+      interval = setInterval(() => {
+        const fromHeight = parseFloat(water.style.height) || 0;
+        time += 1;
+
+        let toHeight, x;
+        if (mode === "increase") {
+          toHeight = Math.min(time * 20, 200);
+          x = Math.min(time * 24, 240);
+        } else {
+          toHeight = Math.max(200 - time * 20, 0);
+          x = Math.min(time * 24, 240);
+        }
+
+        animateWater(fromHeight, toHeight, 1000, () => {
+          addDot(x, toHeight);
+        });
+
+        timeDisplay.textContent = time;
+        volumeDisplay.textContent = toHeight;
+
+        if (time >= 10) clearInterval(interval);
+      }, 1000);
+    });
+
+       resetBtn.addEventListener("click", () => {
+      clearInterval(interval);
+      time = 0;
+      water.style.height = mode === "increase" ? "0px" : "200px";
+      timeDisplay.textContent = "0";
+      volumeDisplay.textContent = mode === "increase" ? "0" : "200";
+
+      const dots = document.querySelectorAll(".dot");
+      dots.forEach(dot => dot.remove());
+    });
+
+    toggleDotBtn.addEventListener("click", () => {
+      showDots = !showDots;
+      toggleDotBtn.textContent = showDots ? "動点を非表示" : "動点を表示";
+
+      const dots = document.querySelectorAll(".dot");
+      dots.forEach(dot => {
+        dot.style.display = showDots ? "block" : "none";
+      });
+    });
+
+    switchModeBtn.addEventListener("click", () => {
+      mode = mode === "increase" ? "decrease" : "increase";
+      modeDisplay.textContent = mode === "increase" ? "増加" : "減少";
+      startBtn.textContent = mode === "increase" ? "増加開始" : "減少開始";
+      switchModeBtn.textContent = mode === "increase" ? "減少モードに切替" : "増加モードに切替";
+
+      // リセット時の水量を更新
+      water.style.height = mode === "increase" ? "0px" : "200px";
+      time = 0;
+      timeDisplay.textContent = "0";
+      volumeDisplay.textContent = mode === "increase" ? "0" : "200";
+
+      const dots = document.querySelectorAll(".dot");
+      dots.forEach(dot => dot.remove());
+    });
+  </script>
+</body>
+</html>
